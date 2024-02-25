@@ -2,10 +2,12 @@
 #include <ESP8266WebServer.h>
 #include <IRremote.h>
 #include <DHT.h>
+#include <WiFiClient.h>
 
 // WiFi settings
 const char *ssid = "ESP8266-AP";
 const char *password = "12345678";
+const char *serverAddress = "192.168.1.100";  // Replace with the IP address of your Python server
 
 // Pin definitions
 #define DHTPIN D7
@@ -39,8 +41,7 @@ void getState(int relayIndex);
 void handleIRCode(unsigned long code);
 void toggleLedState(int ledIndex);
 void setIRCode(int x);
-void getTemperature();
-void getHumidity();
+void sendData(float temperature, float humidity);
 
 void setup() {
   Serial.begin(115200);
@@ -67,8 +68,8 @@ void setup() {
   }
   server.on("/setIRon", HTTP_GET, []() { setIRCode(4); });
   server.on("/setIRoff", HTTP_GET, []() { setIRCode(5); });
-  server.on("/temp", HTTP_GET, getTemperature);
-  server.on("/hum", HTTP_GET, getHumidity);
+  server.on("/temp", HTTP_GET, []() { sendData(temperature, humidity); });
+  server.on("/hum", HTTP_GET, []() { sendData(temperature, humidity); });
 
   // Begin web server
   server.begin();
@@ -89,6 +90,10 @@ void loop() {
     Serial.println(irResults.value, HEX);
     irReceiver.resume();
   }
+  
+  // Read temperature and humidity sensor
+  temperature = dht.readTemperature();
+  humidity = dht.readHumidity();
 }
 
 void handleOn(int relayIndex) {
@@ -146,25 +151,21 @@ void setIRCode(int x) {
   server.send(200, "text/plain", response);
 }
 
-void getTemperature() {
-  temperature = dht.readTemperature();
-  if (isnan(humidity) || isnan(temperature)) {
-    Serial.println("Failed to read from DHT sensor!");
+void sendData(float temperature, float humidity) {
+  WiFiClient client;
+  if (!client.connect(serverAddress, 80)) {
+    Serial.println("Connection to server failed");
     return;
   }
-  server.send(200, "text/plain", String(temperature) + "°C");
-  Serial.print("% | Temperature: ");
-  Serial.print(temperature);
-  Serial.println("°C");
-}
 
-void getHumidity() {
-  humidity = dht.readHumidity();
-  if (isnan(humidity) || isnan(temperature)) {
-    Serial.println("Failed to read from DHT sensor!");
-    return;
+  String url = "/update?temp=" + String(temperature) + "&hum=" + String(humidity);
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+               "Host: " + serverAddress + "\r\n" +
+               "Connection: close\r\n\r\n");
+  delay(10); // Give the server some time to respond
+
+  while (client.available()) {
+    String line = client.readStringUntil('\r');
+    Serial.print(line);
   }
-  server.send(200, "text/plain", String(humidity) + "%");
-  Serial.print("Humidity: ");
-  Serial.print(humidity);
 }
