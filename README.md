@@ -1,6 +1,3 @@
-
-Sure, here's a documentation for the provided ESP8266 code:
-
 ESP8266 Climate Control System Documentation
 Introduction
 This ESP8266 Climate Control System is designed to control relays, read temperature and humidity data from a DHT sensor, and send this data to a Python server for further processing or monitoring.
